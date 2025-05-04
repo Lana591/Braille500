@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Braille Master Pro</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #000;
+            color: #FFF;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #0FF;
+            text-align: center;
+            text-shadow: 0 0 10px #0FF;
+            margin-bottom: 30px;
+        }
+        .braille-cell {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 15px;
+            width: 150px;
+            height: 225px;
+            margin: 30px auto;
+        }
+        .braille-dot {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: #222;
+            border: 3px solid #333;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+        .braille-dot::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: #444;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .braille-dot.active {
+            background: #0F0;
+            box-shadow: 0 0 20px #0F0;
+            border-color: #0F0;
+        }
+        .braille-dot.active::after {
+            background: #FFF;
+            box-shadow: 0 0 10px #FFF;
+        }
+        .braille-dot.correct-preview {
+            background: #0066FF;
+            border-color: #0066FF;
+            box-shadow: 0 0 15px #0066FF;
+        }
+        .braille-dot.correct-preview::after {
+            background: #FFF;
+        }
+        .current-char {
+            font-size: 72px;
+            text-align: center;
+            margin: 30px 0;
+            color: #FF0;
+            text-shadow: 0 0 10px #FF0;
+            height: 100px;
+        }
+        .feedback {
+            text-align: center;
+            font-size: 24px;
+            min-height: 40px;
+            margin: 20px 0;
+        }
+        .correct {
+            color: #0F0;
+            text-shadow: 0 0 10px #0F0;
+        }
+        .incorrect {
+            color: #F00;
+            text-shadow: 0 0 10px #F00;
+        }
+        .navigation {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 30px;
+            gap: 15px;
+        }
+        button {
+            padding: 15px;
+            background: #0066FF;
+            color: #FFF;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 18px;
+            flex: 1;
+        }
+        .settings {
+            margin-top: 30px;
+            padding: 20px;
+            background: #222;
+            border-radius: 10px;
+            border: 1px solid #333;
+        }
+        .settings h3 {
+            color: #0FF;
+            margin-top: 0;
+            text-shadow: 0 0 5px #0FF;
+            margin-bottom: 15px;
+        }
+        .settings label {
+            display: block;
+            margin: 15px 0;
+            font-size: 18px;
+        }
+        .settings input {
+            margin-right: 15px;
+            transform: scale(1.5);
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <h1>Braille Master Pro</h1>
+    
+    <div class="current-char" id="current-letter">A</div>
+    <div class="feedback" id="feedback"></div>
+    
+    <div class="braille-cell">
+        <div class="braille-dot" data-pos="1" onclick="handleDotPress(1)"></div>
+        <div class="braille-dot" data-pos="4" onclick="handleDotPress(4)"></div>
+        <div class="braille-dot" data-pos="2" onclick="handleDotPress(2)"></div>
+        <div class="braille-dot" data-pos="5" onclick="handleDotPress(5)"></div>
+        <div class="braille-dot" data-pos="3" onclick="handleDotPress(3)"></div>
+        <div class="braille-dot" data-pos="6" onclick="handleDotPress(6)"></div>
+    </div>
+    
+    <div class="navigation">
+        <button onclick="prevChar()">Previous</button>
+        <button onclick="nextChar()">Next</button>
+    </div>
+    
+    <div class="settings">
+        <h3>Settings</h3>
+        <label><input type="checkbox" id="vibration" checked> Vibration Feedback</label>
+        <label><input type="checkbox" id="sound" checked> Sound Feedback</label>
+        <label><input type="checkbox" id="speak" checked> Voice Guidance</label>
+        <label><input type="checkbox" id="learn-mode" checked> Learning Mode</label>
+    </div>
+
+    <script>
+        // Correct Braille patterns for letters A-Z
+        const brailleLetters = {
+            'A': [1], 'B': [1,2], 'C': [1,4], 'D': [1,4,5], 'E': [1,5],
+            'F': [1,2,4], 'G': [1,2,4,5], 'H': [1,2,5], 'I': [2,4], 'J': [2,4,5],
+            'K': [1,3], 'L': [1,2,3], 'M': [1,3,4], 'N': [1,3,4,5], 'O': [1,3,5],
+            'P': [1,2,3,4], 'Q': [1,2,3,4,5], 'R': [1,2,3,5], 'S': [2,3,4],
+            'T': [2,3,4,5], 'U': [1,3,6], 'V': [1,2,3,6], 'W': [2,4,5,6],
+            'X': [1,3,4,6], 'Y': [1,3,4,5,6], 'Z': [1,3,5,6]
+        };
+        
+        // App state
+        let letterIndex = 0;
+        const letters = Object.keys(brailleLetters);
+        let activeDots = [];
+        let correctDots = [];
+        
+        // Initialize
+        function init() {
+            updateCurrentChar();
+            document.addEventListener('keydown', function(e) {
+                if (e.key >= '1' && e.key <= '6') handleDotPress(parseInt(e.key));
+                else if (e.key === 'ArrowLeft') prevChar();
+                else if (e.key === 'ArrowRight') nextChar();
+            });
+            if (document.getElementById('speak').checked) {
+                speakCurrentChar();
+            }
+        }
+        
+        // Speak current character
+        function speakCurrentChar() {
+            speak("Letter " + letters[letterIndex]);
+        }
+        
+        // Update current character
+        function updateCurrentChar() {
+            correctDots = brailleLetters[letters[letterIndex]];
+            document.getElementById('current-letter').textContent = letters[letterIndex];
+            document.getElementById('feedback').textContent = '';
+            
+            activeDots = [];
+            document.querySelectorAll('.braille-dot').forEach(dot => {
+                dot.classList.remove('active', 'correct-preview');
+            });
+            
+            if (document.getElementById('learn-mode').checked) {
+                correctDots.forEach(pos => {
+                    const dot = document.querySelector(`.braille-dot[data-pos="${pos}"]`);
+                    dot.classList.add('correct-preview');
+                });
+                if (document.getElementById('speak').checked) {
+                    speak(`Letter ${letters[letterIndex]}. Correct dots: ${correctDots.join(', ')}`);
+                }
+            }
+        }
+        
+        // Handle dot press with repeat feedback
+        function handleDotPress(pos) {
+            const dot = document.querySelector(`.braille-dot[data-pos="${pos}"]`);
+            const isCorrect = correctDots.includes(pos);
+            const feedback = document.getElementById('feedback');
+            
+            if (isCorrect) {
+                // Toggle active state for correct dots
+                if (!dot.classList.contains('active')) {
+                    dot.classList.add('active');
+                    activeDots.push(pos);
+                } else {
+                    // Remove if already active (toggle behavior)
+                    dot.classList.remove('active');
+                    activeDots = activeDots.filter(p => p !== pos);
+                }
+                
+                // Always provide feedback when pressing correct dots
+                if (document.getElementById('vibration').checked) navigator.vibrate(100);
+                if (document.getElementById('sound').checked) playSound('click');
+                if (document.getElementById('speak').checked) {
+                    speak(`Dot ${pos}, correct for letter ${letters[letterIndex]}`);
+                }
+                
+                // Check if all correct dots are selected
+                if (activeDots.length === correctDots.length) {
+                    feedback.textContent = 'Correct!';
+                    feedback.className = 'feedback correct';
+                    if (document.getElementById('vibration').checked) navigator.vibrate([200, 100, 200]);
+                    if (document.getElementById('sound').checked) playSound('correct');
+                    if (document.getElementById('speak').checked) speak("All correct! Well done!");
+                }
+            } else {
+                // Provide feedback for incorrect dots (without activating them)
+                feedback.textContent = 'Incorrect dot';
+                feedback.className = 'feedback incorrect';
+                if (document.getElementById('vibration').checked) navigator.vibrate(50);
+                if (document.getElementById('sound').checked) playSound('error');
+                if (document.getElementById('speak').checked) speak("Incorrect dot");
+            }
+        }
+        
+        // Navigation
+        function prevChar() { 
+            letterIndex = (letterIndex - 1 + letters.length) % letters.length; 
+            updateCurrentChar();
+            if (document.getElementById('speak').checked) speakCurrentChar();
+        }
+        function nextChar() { 
+            letterIndex = (letterIndex + 1) % letters.length; 
+            updateCurrentChar();
+            if (document.getElementById('speak').checked) speakCurrentChar();
+        }
+        
+        // Sound effects
+        function playSound(type) {
+            const sounds = {
+                'click': 'https://assets.mixkit.co/sfx/preview/mixkit-arcade-game-jump-coin-216.mp3',
+                'correct': 'https://assets.mixkit.co/sfx/preview/mixkit-correct-answer-tone-2870.mp3',
+                'error': 'https://assets.mixkit.co/sfx/preview/mixkit-wrong-answer-fail-notification-946.mp3',
+                'swipe': 'https://assets.mixkit.co/sfx/preview/mixkit-quick-jump-arcade-game-239.mp3'
+            };
+            const audio = new Audio(sounds[type]);
+            audio.play().catch(e => console.log("Sound error:", e));
+        }
+        
+        // Text-to-speech
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 0.9;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+        
+        // Start the app
+        window.onload = init;
+    </script>
+
+</body></html>
